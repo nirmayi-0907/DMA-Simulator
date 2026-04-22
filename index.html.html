@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Interactive dynamic memory allocation simulator — visualize malloc, free, fragmentation, and coalescing in real time." />
+  <title>MemViz — Dynamic Memory Allocator Simulator</title>
+  <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;600;700;800&display=swap');
+
+:root {
+    --bg-deep: #f5e6f5;
+    --bg-surface: #eedaf2;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-elevated: #e0c8ee;
+    --border: rgba(180, 100, 220, 0.2);
+    --text-primary: #2d1a3d;
+    --text-secondary: #7a4a9a;
+    --text-dim: #b899cc;
+    --accent-cyan: #00f0ff;
+    --accent-magenta: #ff00aa;
+    --accent-purple: #8844ff;
+    --accent-green: #00ff88;
+    --accent-orange: #ff8800;
+    --accent-red: #ff3355;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --spring: 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease: 0.3s cubic-bezier(0.4, 0, 0.2, 1)
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0
+}
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: radial-gradient(ellipse at 20% 0%, rgba(255, 182, 230, 0.5) 0%, transparent 55%), radial-gradient(ellipse at 80% 100%, rgba(200, 150, 255, 0.4) 0%, transparent 55%), radial-gradient(ellipse at 50% 50%, rgba(240, 200, 255, 0.3) 0%, transparent 70%)
+}
+
+::-webkit-scrollbar {
+    width: 5px
+}
+
+::-webkit-scrollbar-track {
+    background: transparent
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--accent-purple);
+    border-radius: 3px
+}
+
+/* Header */
+.app-header {
+    text-align: center;
+    padding: 32px 20px 16px
+}
+
+.app-header h1 {
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple), var(--accent-magenta));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 4s ease infinite;
+    background-size: 200% 200%
+}
+
+@keyframes shimmer {
+
+    0%,
+    100% {
+        background-position: 0% 50%
+    }
+
+    50% {
+        background-position: 100% 50%
+    }
+}
+
+.app-header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-top: 4px;
+    font-weight: 300
+}
+
+/* Layout */
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px
+}
+
+/* Cards */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    transition: border-color var(--ease), box-shadow var(--ease)
+}
+
+.card:hover {
+    border-color: rgba(100, 100, 255, 0.22);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.2)
+}
+
+.card-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px
+}
+
+.card-title .icon {
+    font-size: 1rem
+}
+
+/* Sidebar */
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px
+}
+
+/* Inputs */
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px
+}
+
+.input-group label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px
+}
+
+.input-row {
+    display: flex;
+    gap: 8px
+}
+
+input[type="number"],
+input[type="text"] {
+    flex: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color var(--ease), box-shadow var(--ease)
+}
+
+input:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1)
+}
+
+/* Strategy Toggle */
+.strategy-toggle {
+    display: flex;
+    background: var(--bg-deep);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 3px
+}
+
+.strategy-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--ease);
+    background: transparent;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px
+}
+
+.strategy-btn.active {
+    background: linear-gradient(135deg, var(--accent-purple), #5522bb);
+    color: #fff;
+    box-shadow: 0 0 15px rgba(136, 68, 255, 0.3)
+}
+
+.strategy-btn:hover:not(.active) {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03)
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all var(--spring);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    position: relative;
+    overflow: hidden
+}
+
+.btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent);
+    opacity: 0;
+    transition: opacity var(--ease)
+}
+
+.btn:hover::after {
+    opacity: 1
+}
+
+.btn-alloc {
+    background: linear-gradient(135deg, var(--accent-cyan), #0088cc);
+    color: #000;
+    flex: 1
+}
+
+.btn-alloc:hover {
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.4);
+    transform: translateY(-2px)
+}
+
+.btn-free-action {
+    background: linear-gradient(135deg, var(--accent-magenta), #aa0066);
+    color: #fff
+}
+
+.btn-free-action:hover {
+    box-shadow: 0 0 25px rgba(255, 0, 170, 0.4);
+    transform: translateY(-2px)
+}
+
+.btn-reset {
+    background: transparent;
+    border: 1px solid rgba(255, 51, 85, 0.4);
+    color: var(--accent-red);
+    width: 100%
+}
+
+.btn-reset:hover {
+    background: rgba(255, 51, 85, 0.08);
+    box-shadow: 0 0 20px rgba(255, 51, 85, 0.15)
+}
+
+.btn-random {
+    background: linear-gradient(135deg, var(--accent-purple), #5522bb);
+    color: #fff;
+    width: 100%
+}
+
+.btn-random:hover {
+    box-shadow: 0 0 20px rgba(136, 68, 255, 0.4);
+    transform: translateY(-2px)
+}
+
+.btn:active {
+    transform: scale(0.96) !important
+}
+
+.btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important
+}
+
+/* Stats */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px
+}
+
+.stat-item {
+    background: var(--bg-deep);
+    border-radius: var(--radius-sm);
+    padding: 12px 10px;
+    text-align: center;
+    transition: transform var(--spring)
+}
+
+.stat-item:hover {
+    transform: scale(1.03)
+}
+
+.stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.2;
+    transition: color var(--ease)
+}
+
+.stat-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px
+}
+
+.stat-cyan .stat-value {
+    color: #0088aa
+}
+
+.stat-magenta .stat-value {
+    color: var(--accent-magenta)
+}
+
+.stat-green .stat-value {
+    color: #00995a
+}
+
+.stat-orange .stat-value {
+    color: var(--accent-orange)
+}
+
+/* Circular Gauge */
+.gauge-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 8px 0
+}
+
+.gauge-svg {
+    transform: rotate(-90deg)
+}
+
+.gauge-bg {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 8
+}
+
+.gauge-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease
+}
+
+.gauge-center {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    fill: var(--text-primary)
+}
+
+.gauge-label-text {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.6rem;
+    fill: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px
+}
+
+.gauge-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px
+}
+
+.gauge-info-item {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-secondary)
+}
+
+.gauge-info-item span {
+    font-weight: 700
+}
+
+/* Memory Pool */
+.main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px
+}
+
+.memory-pool-wrapper {
+    position: relative;
+    background: var(--bg-deep);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    border: 1px solid var(--border)
+}
+
+.memory-ruler {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim)
+}
+
+.memory-pool {
+    display: flex;
+    height: 80px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    position: relative;
+    background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0px, rgba(255, 255, 255, 0.012) 1px, transparent 1px, transparent 10px)
+}
+
+/* Memory Blocks */
+.mem-block {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    position: relative;
+    cursor: default;
+    overflow: hidden;
+    border-right: 1px solid rgba(0, 0, 0, 0.4);
+    animation: blockReveal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: filter 0.3s ease, opacity 0.3s ease
+}
+
+@keyframes blockReveal {
+    from {
+        opacity: 0;
+        transform: scaleX(0.3)
+    }
+
+    to {
+        opacity: 1;
+        transform: scaleX(1)
+    }
+}
+
+.mem-block.free {
+    background: linear-gradient(180deg, rgba(220, 200, 240, 0.6), rgba(200, 180, 225, 0.4))
+}
+
+.mem-block.free::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(45deg, transparent 0px, transparent 8px, rgba(255, 255, 255, 0.015) 8px, rgba(255, 255, 255, 0.015) 9px)
+}
+
+.mem-block.allocated {
+    cursor: pointer;
+    position: relative
+}
+
+.mem-block.allocated::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 40%, transparent 60%, rgba(0, 0, 0, 0.1));
+    pointer-events: none
+}
+
+.mem-block.allocated:hover {
+    filter: brightness(1.3);
+    z-index: 2
+}
+
+.mem-block.allocated:hover .block-glow {
+    opacity: 1
+}
+
+.block-glow {
+    position: absolute;
+    inset: -2px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none
+}
+
+/* Allocated block color palette */
+.mem-block.alloc-0 {
+    background: linear-gradient(180deg, #7ec8ff, #4da8f0)
+}
+
+.mem-block.alloc-0 .block-glow {
+    box-shadow: 0 0 20px rgba(126, 200, 255, 0.5)
+}
+
+.mem-block.alloc-1 {
+    background: linear-gradient(180deg, #f79de0, #e864c8)
+}
+
+.mem-block.alloc-1 .block-glow {
+    box-shadow: 0 0 20px rgba(247, 157, 224, 0.5)
+}
+
+.mem-block.alloc-2 {
+    background: linear-gradient(180deg, #c4a4f8, #a07de8)
+}
+
+.mem-block.alloc-2 .block-glow {
+    box-shadow: 0 0 20px rgba(196, 164, 248, 0.5)
+}
+
+.mem-block.alloc-3 {
+    background: linear-gradient(180deg, #ffd080, #f0b040)
+}
+
+.mem-block.alloc-3 .block-glow {
+    box-shadow: 0 0 20px rgba(255, 208, 128, 0.5)
+}
+
+.mem-block.alloc-4 {
+    background: linear-gradient(180deg, #70e8c0, #3dcc99)
+}
+
+.mem-block.alloc-4 .block-glow {
+    box-shadow: 0 0 20px rgba(112, 232, 192, 0.5)
+}
+
+.mem-block.alloc-5 {
+    background: linear-gradient(180deg, #ffe066, #f0c820)
+}
+
+.mem-block.alloc-5 .block-glow {
+    box-shadow: 0 0 20px rgba(255, 224, 102, 0.5)
+}
+
+.mem-block.alloc-6 {
+    background: linear-gradient(180deg, #ff9aaa, #f06070)
+}
+
+.mem-block.alloc-6 .block-glow {
+    box-shadow: 0 0 20px rgba(255, 154, 170, 0.5)
+}
+
+.mem-block.alloc-7 {
+    background: linear-gradient(180deg, #90e4f8, #50c8e8)
+}
+
+.mem-block.alloc-7 .block-glow {
+    box-shadow: 0 0 20px rgba(144, 228, 248, 0.5)
+}
+
+.mem-block-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    z-index: 1
+}
+
+.mem-block-size {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem;
+    color: rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+    z-index: 1
+}
+
+.mem-block.free .mem-block-label {
+    color: #5a3a7a;
+    font-weight: 600
+}
+
+.mem-block.free .mem-block-size {
+    color: #8a6aaa
+}
+
+/* Tooltip */
+.mem-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 100;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5)
+}
+
+.mem-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--bg-elevated)
+}
+
+.mem-block:hover .mem-tooltip {
+    opacity: 1
+}
+
+.tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    line-height: 1.6
+}
+
+.tooltip-key {
+    color: var(--text-dim)
+}
+
+.tooltip-val {
+    color: var(--accent-cyan);
+    font-weight: 600
+}
+
+/* Block Table */
+.memory-blocks-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 4px
+}
+
+.block-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-deep);
+    border-radius: var(--radius-sm);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    border-left: 3px solid transparent;
+    transition: all var(--ease);
+    animation: rowSlide 0.3s ease
+}
+
+@keyframes rowSlide {
+    from {
+        opacity: 0;
+        transform: translateX(-8px)
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0)
+    }
+}
+
+.block-row.allocated {
+    border-left-color: var(--accent-cyan)
+}
+
+.block-row.free-row {
+    border-left-color: rgba(255, 255, 255, 0.08);
+    opacity: 0.5
+}
+
+.block-row:hover {
+    background: var(--bg-elevated);
+    opacity: 1 !important
+}
+
+.block-chip {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px
+}
+
+.block-chip.chip-alloc {
+    background: rgba(0, 136, 170, 0.15);
+    color: #0088aa
+}
+
+.block-chip.chip-free {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-dim)
+}
+
+.block-addr {
+    color: var(--text-secondary);
+    min-width: 75px
+}
+
+.block-sz {
+    color: var(--text-primary);
+    min-width: 55px
+}
+
+.block-lbl {
+    color: #0088aa;
+    min-width: 36px
+}
+
+.block-free-btn {
+    margin-left: auto;
+    background: rgba(255, 0, 170, 0.1);
+    border: 1px solid rgba(255, 0, 170, 0.25);
+    color: var(--accent-magenta);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: all var(--spring)
+}
+
+.block-free-btn:hover {
+    background: rgba(255, 0, 170, 0.2);
+    box-shadow: 0 0 15px rgba(255, 0, 170, 0.2);
+    transform: scale(1.05)
+}
+
+/* Log */
+.log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px
+}
+
+.log-entry {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    padding: 6px 10px;
+    background: var(--bg-deep);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: logSlide 0.3s ease
+}
+
+.log-entry .log-action {
+    font-weight: 700;
+    text-transform: uppercase;
+    min-width: 56px
+}
+
+.log-entry.log-malloc .log-action {
+    color: #0088aa
+}
+
+.log-entry.log-free .log-action {
+    color: #00995a
+}
+
+.log-entry.log-fail .log-action {
+    color: var(--accent-red)
+}
+
+.log-entry.log-reset .log-action {
+    color: var(--accent-orange)
+}
+
+.log-entry .log-detail {
+    color: var(--text-dim)
+}
+
+.log-entry .log-explain {
+    color: var(--accent-purple);
+    font-style: italic;
+    margin-left: auto;
+    font-size: 0.65rem
+}
+
+@keyframes logSlide {
+    from {
+        opacity: 0;
+        transform: translateX(-10px)
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0)
+    }
+}
+
+/* Toast */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px
+}
+
+.toast {
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: #fff;
+    animation: toastIn 0.4s var(--spring), toastOut 0.3s ease 2.5s forwards;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4)
+}
+
+.toast-success {
+    background: linear-gradient(135deg, #00aa55, #007744);
+    border-left: 3px solid var(--accent-green)
+}
+
+.toast-error {
+    background: linear-gradient(135deg, #cc2244, #991133);
+    border-left: 3px solid var(--accent-red)
+}
+
+.toast-info {
+    background: linear-gradient(135deg, #0077bb, #005588);
+    border-left: 3px solid var(--accent-cyan)
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(40px) scale(0.9)
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1)
+    }
+}
+
+@keyframes toastOut {
+    from {
+        opacity: 1
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(-10px)
+    }
+}
+
+/* Free List */
+.freelist-visual {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+    padding: 6px 0
+}
+
+.fl-node {
+    display: flex;
+    align-items: center;
+    background: var(--bg-deep);
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 153, 90, 0.3);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: #00995a;
+    animation: blockReveal 0.3s ease;
+    transition: transform var(--spring)
+}
+
+.fl-node:hover {
+    transform: scale(1.08)
+}
+
+.fl-arrow {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    animation: arrowPulse 1.5s ease infinite
+}
+
+@keyframes arrowPulse {
+
+    0%,
+    100% {
+        opacity: 0.4
+    }
+
+    50% {
+        opacity: 1
+    }
+}
+
+.fl-null {
+    color: var(--accent-red);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    opacity: 0.5
+}
+
+/* Responsive */
+@media(max-width:900px) {
+    .app-container {
+        grid-template-columns: 1fr
+    }
+
+    .sidebar {
+        order: 2
+    }
+
+    .main-content {
+        order: 1
+    }
+}  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1>⟨ MemViz ⟩</h1>
+    <p>Dynamic Memory Allocation Simulator</p>
+  </header>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <div class="app-container">
+    <!-- ═══ Sidebar ═══ -->
+    <aside class="sidebar">
+      <!-- Strategy Toggle -->
+      <div class="card">
+        <div class="card-title"><span class="icon">⚙</span> Strategy</div>
+        <div class="strategy-toggle">
+          <button class="strategy-btn active" data-strategy="first-fit" id="btnFirstFit">First Fit</button>
+          <button class="strategy-btn" data-strategy="best-fit" id="btnBestFit">Best Fit</button>
+        </div>
+      </div>
+
+      <!-- Allocate -->
+      <div class="card">
+        <div class="card-title"><span class="icon">⚡</span> Allocate</div>
+        <div class="input-group">
+          <label>Label</label>
+          <input type="text" id="allocLabel" placeholder="Auto: P1, P2..." maxlength="6" />
+        </div>
+        <div class="input-group" style="margin-top:10px">
+          <label>Size (units)</label>
+          <div class="input-row">
+            <input type="number" id="allocSize" min="1" max="1000" value="120" />
+            <button class="btn btn-alloc" id="btnMalloc">Malloc</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Free -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🗑</span> Free</div>
+        <div class="input-group">
+          <label>Start Address</label>
+          <div class="input-row">
+            <input type="number" id="freeAddr" min="0" max="999" value="0" />
+            <button class="btn btn-free-action" id="btnFree">Free</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🎲</span> Quick Actions</div>
+        <button class="btn btn-random" id="btnRandom">Random Scenario</button>
+        <button class="btn btn-reset" id="btnReset" style="margin-top:8px">Reset Memory</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span> Statistics</div>
+        <div class="stats-grid">
+          <div class="stat-item stat-cyan"><div class="stat-value" id="statAllocated">0</div><div class="stat-label">Allocated</div></div>
+          <div class="stat-item stat-green"><div class="stat-value" id="statFree">1000</div><div class="stat-label">Free</div></div>
+          <div class="stat-item stat-orange"><div class="stat-value" id="statUtil">0%</div><div class="stat-label">Utilization</div></div>
+          <div class="stat-item stat-magenta"><div class="stat-value" id="statBlocks">1</div><div class="stat-label">Blocks</div></div>
+        </div>
+      </div>
+
+      <!-- Fragmentation Gauge -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🔬</span> Fragmentation</div>
+        <div class="gauge-wrap">
+          <svg width="100" height="100" class="gauge-svg" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" class="gauge-bg"/>
+            <circle cx="50" cy="50" r="42" class="gauge-fill" id="gaugeCircle"
+              stroke-dasharray="263.9" stroke-dashoffset="263.9" stroke="var(--accent-green)"/>
+            <g transform="rotate(90 50 50)">
+              <text x="50" y="47" text-anchor="middle" class="gauge-center" id="gaugeText">0%</text>
+              <text x="50" y="60" text-anchor="middle" class="gauge-label-text">FRAG</text>
+            </g>
+          </svg>
+          <div class="gauge-info">
+            <div class="gauge-info-item">Free: <span id="gaugeFree">1000</span>u</div>
+            <div class="gauge-info-item">Largest: <span id="gaugeLargest">1000</span>u</div>
+            <div class="gauge-info-item">Chunks: <span id="gaugeChunks">1</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Free List -->
+      <div class="card">
+        <div class="card-title"><span class="icon">🔗</span> Free List</div>
+        <div class="freelist-visual" id="freeListViz"></div>
+      </div>
+    </aside>
+
+    <!-- ═══ Main ═══ -->
+    <div class="main-content">
+      <div class="card">
+        <div class="card-title"><span class="icon">🧠</span> Memory Pool — 1000 Units</div>
+        <div class="memory-pool-wrapper">
+          <div class="memory-ruler" id="memoryRuler"></div>
+          <div class="memory-pool" id="memoryPool"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> Block Table</div>
+        <div class="memory-blocks-detail" id="blockTable"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">📝</span> Operation Log</div>
+        <div class="log-list" id="logList">
+          <div class="log-entry log-reset"><span class="log-action">init</span><span class="log-detail">Memory pool initialized — 1000 units free</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+/**
+ * ============================================================
+ *  Dynamic Memory Allocator Simulator
+ *  -----------------------------------
+ *  A simplified malloc/free implementation using a linked-list
+ *  free-list strategy over a simulated 1000-unit memory pool.
+ *
+ *  Strategies: First Fit / Best Fit (switchable at runtime)
+ *  Coalescing: Adjacent free blocks are merged on free().
+ * ============================================================
+ */
+
+// ── Node for the doubly-linked block list ──────────────────
+class MemoryBlock {
+  /**
+   * @param {number} start  – Starting address in the memory pool
+   * @param {number} size   – Size of this block (units)
+   * @param {boolean} free  – Whether the block is free
+   */
+  constructor(start, size, free = true) {
+    this.start = start;
+    this.size = size;
+    this.free = free;
+    this.next = null;
+    this.prev = null;
+    // A monotonically-increasing id so the UI can track blocks
+    this.id = MemoryBlock._nextId++;
+    // Label set by UI (e.g. "P1")
+    this.label = null;
+  }
+}
+MemoryBlock._nextId = 0;
+
+// ── Allocator ──────────────────────────────────────────────
+class MemoryAllocator {
+  /**
+   * @param {number} totalSize – Total simulated memory (default 1000)
+   */
+  constructor(totalSize = 1000) {
+    this.totalSize = totalSize;
+    // Strategy: 'first-fit' or 'best-fit'
+    this.strategy = 'first-fit';
+
+    // The entire pool starts as one giant free block
+    this.head = new MemoryBlock(0, totalSize, true);
+
+    // History log for the UI timeline
+    this.history = [];
+  }
+
+  /**
+   * Switch allocation strategy at runtime.
+   * @param {'first-fit'|'best-fit'} strategy
+   */
+  setStrategy(strategy) {
+    this.strategy = strategy;
+    this._log('strategy', { strategy });
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  malloc(size)  –  Allocate using the current strategy
+  // ────────────────────────────────────────────────────────
+  /**
+   * Allocates `size` units using the active strategy.
+   *
+   * First Fit: Pick the *first* free block whose size >= requested.
+   * Best Fit:  Pick the *smallest* free block whose size >= requested
+   *            (minimises leftover waste).
+   *
+   * After choosing a block:
+   *   • If the block is exactly the right size → mark allocated.
+   *   • If the block is larger → split it:
+   *       – The first part becomes the allocated block.
+   *       – The remainder stays free.
+   *
+   * @param {number} size   – Requested allocation size
+   * @param {string} [label] – Optional label (e.g. "P1")
+   * @returns {number|null}  – Starting address, or null on failure
+   */
+  malloc(size, label = null) {
+    if (size <= 0) return null;
+
+    let chosen = null;
+
+    if (this.strategy === 'best-fit') {
+      // ── Best Fit: find smallest adequate free block ──
+      let current = this.head;
+      while (current) {
+        if (current.free && current.size >= size) {
+          if (!chosen || current.size < chosen.size) {
+            chosen = current;
+          }
+        }
+        current = current.next;
+      }
+    } else {
+      // ── First Fit: find first adequate free block ──
+      let current = this.head;
+      while (current) {
+        if (current.free && current.size >= size) {
+          chosen = current;
+          break;
+        }
+        current = current.next;
+      }
+    }
+
+    if (!chosen) {
+      this._log('malloc_fail', { size, label });
+      return null;
+    }
+
+    // ── Split if the free block is larger than needed ──
+    if (chosen.size > size) {
+      const remainder = new MemoryBlock(
+        chosen.start + size,
+        chosen.size - size,
+        true                       // remainder stays free
+      );
+
+      // Splice the remainder into the list after `chosen`
+      remainder.next = chosen.next;
+      remainder.prev = chosen;
+      if (chosen.next) chosen.next.prev = remainder;
+      chosen.next = remainder;
+
+      // Shrink chosen to the requested size
+      chosen.size = size;
+    }
+
+    // Mark block as allocated
+    chosen.free = false;
+    chosen.label = label;
+
+    this._log('malloc', { address: chosen.start, size, label, strategy: this.strategy });
+    return chosen.start;
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  free(address)  –  Free + coalesce adjacent blocks
+  // ────────────────────────────────────────────────────────
+  /**
+   * Frees the block at `address` and merges with adjacent free
+   * neighbours (coalescing) to reduce external fragmentation.
+   *
+   * @param {number} address – Start address of the block to free
+   * @returns {boolean}       – true if freed, false if invalid
+   */
+  free(address) {
+    let current = this.head;
+
+    while (current) {
+      if (current.start === address && !current.free) {
+        current.free = true;
+        const freedLabel = current.label;
+        current.label = null;
+
+        let merged = false;
+
+        // ── Coalesce with NEXT block if it is also free ──
+        if (current.next && current.next.free) {
+          const absorbed = current.next;
+          current.size += absorbed.size;
+          current.next = absorbed.next;
+          if (absorbed.next) absorbed.next.prev = current;
+          merged = true;
+        }
+
+        // ── Coalesce with PREVIOUS block if it is also free ──
+        if (current.prev && current.prev.free) {
+          const absorber = current.prev;
+          absorber.size += current.size;
+          absorber.next = current.next;
+          if (current.next) current.next.prev = absorber;
+          merged = true;
+        }
+
+        this._log('free', { address, label: freedLabel, merged });
+        return true;
+      }
+
+      current = current.next;
+    }
+
+    this._log('free_fail', { address });
+    return false;
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  getMemoryLayout()  –  Snapshot of all blocks
+  // ────────────────────────────────────────────────────────
+  /**
+   * Returns an ordered array of every block in the list.
+   * Each entry contains: { id, start, size, free, label }
+   */
+  getMemoryLayout() {
+    const layout = [];
+    let current = this.head;
+
+    while (current) {
+      layout.push({
+        id: current.id,
+        start: current.start,
+        size: current.size,
+        free: current.free,
+        label: current.label,
+      });
+      current = current.next;
+    }
+
+    return layout;
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  getFragmentation()  –  External fragmentation metric
+  // ────────────────────────────────────────────────────────
+  /**
+   * Fragmentation = 1 − (largest free block / total free memory)
+   *
+   * If all free memory is contiguous, fragmentation = 0%.
+   * If it's scattered into many small pieces, fragmentation → 100%.
+   *
+   * @returns {{ percentage: number, totalFree: number,
+   *             largestFree: number, freeBlocks: number,
+   *             totalAllocated: number, utilization: number }}
+   */
+  getFragmentation() {
+    let totalFree = 0;
+    let largestFree = 0;
+    let freeBlocks = 0;
+    let allocatedBlocks = 0;
+    let current = this.head;
+
+    while (current) {
+      if (current.free) {
+        totalFree += current.size;
+        if (current.size > largestFree) largestFree = current.size;
+        freeBlocks++;
+      } else {
+        allocatedBlocks++;
+      }
+      current = current.next;
+    }
+
+    const percentage =
+      totalFree === 0 ? 0 : (1 - largestFree / totalFree) * 100;
+
+    return {
+      percentage: Math.round(percentage * 100) / 100,
+      totalFree,
+      largestFree,
+      freeBlocks,
+      allocatedBlocks,
+      totalAllocated: this.totalSize - totalFree,
+      utilization:
+        Math.round(((this.totalSize - totalFree) / this.totalSize) * 10000) /
+        100,
+    };
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  getAllocatedBlocks()  –  Convenience for the UI
+  // ────────────────────────────────────────────────────────
+  getAllocatedBlocks() {
+    return this.getMemoryLayout().filter((b) => !b.free);
+  }
+
+  // ────────────────────────────────────────────────────────
+  //  reset()  –  Wipe everything
+  // ────────────────────────────────────────────────────────
+  reset() {
+    MemoryBlock._nextId = 0;
+    this.head = new MemoryBlock(0, this.totalSize, true);
+    this.history = [];
+    this._log('reset', {});
+  }
+
+  // ── Internal: append to history log ─────────────────────
+  _log(action, details) {
+    this.history.push({
+      action,
+      details,
+      timestamp: Date.now(),
+      layout: this.getMemoryLayout(),
+      fragmentation: this.getFragmentation(),
+    });
+  }
+}
+
+// Make available globally (no bundler)
+window.MemoryAllocator = MemoryAllocator;
+  </script>
+  <script>
+/**
+ * ============================================================
+ *  app.js — UI Controller for the Memory Allocator Simulator
+ *  Bridges the MemoryAllocator engine with the DOM.
+ *  Features: circular gauge, strategy toggle, rich tooltips,
+ *            educational log explanations, glow effects.
+ * ============================================================
+ */
+(() => {
+  const allocator = new MemoryAllocator(1000);
+  let labelCounter = 1;
+  const labelColorMap = {};
+  let colorIndex = 0;
+  const PALETTE = 8;
+
+  function getColorClass(label) {
+    if (!label) return 'alloc-0';
+    if (!(label in labelColorMap)) { labelColorMap[label] = colorIndex % PALETTE; colorIndex++; }
+    return `alloc-${labelColorMap[label]}`;
+  }
+
+  // ── DOM helpers ──────────────────────────────────────
+  const $ = (id) => document.getElementById(id);
+  const allocSize  = $('allocSize');
+  const allocLabel = $('allocLabel');
+  const freeAddr   = $('freeAddr');
+  const memPool    = $('memoryPool');
+  const memRuler   = $('memoryRuler');
+  const blockTable = $('blockTable');
+  const logList    = $('logList');
+  const freeListViz = $('freeListViz');
+  const toastBox   = $('toastContainer');
+  const gaugeCircle = $('gaugeCircle');
+  const gaugeText   = $('gaugeText');
+
+  // ── Toast ─────────────────────────────────────────────
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    toastBox.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
+  // ── Ruler ─────────────────────────────────────────────
+  function buildRuler() {
+    memRuler.innerHTML = '';
+    [0,100,200,300,400,500,600,700,800,900,1000].forEach(t => {
+      const s = document.createElement('span');
+      s.textContent = t;
+      memRuler.appendChild(s);
+    });
+  }
+
+  // ── Memory Pool Render ────────────────────────────────
+  function renderPool() {
+    const layout = allocator.getMemoryLayout();
+    memPool.innerHTML = '';
+    layout.forEach(block => {
+      const pct = (block.size / allocator.totalSize) * 100;
+      const div = document.createElement('div');
+      div.className = `mem-block ${block.free ? 'free' : 'allocated ' + getColorClass(block.label)}`;
+      div.style.width = `${pct}%`;
+
+      // Glow element for allocated blocks
+      if (!block.free) {
+        const glow = document.createElement('div');
+        glow.className = 'block-glow';
+        div.appendChild(glow);
+      }
+
+      // Labels (only if wide enough)
+      if (pct > 3) {
+        const lbl = document.createElement('span');
+        lbl.className = 'mem-block-label';
+        lbl.textContent = block.free ? 'free' : (block.label || '—');
+        div.appendChild(lbl);
+      }
+      if (pct > 5) {
+        const sz = document.createElement('span');
+        sz.className = 'mem-block-size';
+        sz.textContent = block.size + 'u';
+        div.appendChild(sz);
+      }
+
+      // Rich tooltip
+      const tip = document.createElement('div');
+      tip.className = 'mem-tooltip';
+      tip.innerHTML = `
+        <div class="tooltip-row"><span class="tooltip-key">Status</span><span class="tooltip-val">${block.free ? 'Free' : 'Allocated'}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Address</span><span class="tooltip-val">0x${block.start.toString(16).padStart(4,'0')}</span></div>
+        <div class="tooltip-row"><span class="tooltip-key">Size</span><span class="tooltip-val">${block.size} units</span></div>
+        ${block.label ? `<div class="tooltip-row"><span class="tooltip-key">Label</span><span class="tooltip-val">${block.label}</span></div>` : ''}
+        ${!block.free ? `<div class="tooltip-row"><span class="tooltip-key">Action</span><span class="tooltip-val">Click to free</span></div>` : ''}`;
+      div.appendChild(tip);
+
+      if (!block.free) {
+        div.addEventListener('click', () => doFree(block.start));
+      }
+
+      memPool.appendChild(div);
+    });
+  }
+
+  // ── Block Table ───────────────────────────────────────
+  function renderTable() {
+    const layout = allocator.getMemoryLayout();
+    blockTable.innerHTML = '';
+    layout.forEach(block => {
+      const row = document.createElement('div');
+      row.className = `block-row ${block.free ? 'free-row' : 'allocated'}`;
+      row.innerHTML = `
+        <span class="block-chip ${block.free ? 'chip-free' : 'chip-alloc'}">${block.free ? 'free' : 'alloc'}</span>
+        <span class="block-addr">0x${block.start.toString(16).padStart(4,'0')}</span>
+        <span class="block-sz">${block.size} u</span>
+        <span class="block-lbl">${block.label || ''}</span>`;
+      if (!block.free) {
+        const btn = document.createElement('button');
+        btn.className = 'block-free-btn';
+        btn.textContent = 'Free';
+        btn.addEventListener('click', () => doFree(block.start));
+        row.appendChild(btn);
+      }
+      blockTable.appendChild(row);
+    });
+  }
+
+  // ── Stats + Circular Gauge ────────────────────────────
+  function renderStats() {
+    const f = allocator.getFragmentation();
+    $('statAllocated').textContent = f.totalAllocated;
+    $('statFree').textContent      = f.totalFree;
+    $('statUtil').textContent      = f.utilization + '%';
+    $('statBlocks').textContent    = f.allocatedBlocks + f.freeBlocks;
+
+    // Circular gauge
+    const circumference = 2 * Math.PI * 42; // ~263.9
+    const offset = circumference - (f.percentage / 100) * circumference;
+    gaugeCircle.style.strokeDashoffset = offset;
+
+    // Color the gauge based on severity
+    let color = 'var(--accent-green)';
+    if (f.percentage > 60) color = 'var(--accent-red)';
+    else if (f.percentage > 30) color = 'var(--accent-orange)';
+    else if (f.percentage > 10) color = 'var(--accent-cyan)';
+    gaugeCircle.style.stroke = color;
+
+    gaugeText.textContent = f.percentage + '%';
+    $('gaugeFree').textContent    = f.totalFree;
+    $('gaugeLargest').textContent = f.largestFree;
+    $('gaugeChunks').textContent  = f.freeBlocks;
+  }
+
+  // ── Free List Visualization ───────────────────────────
+  function renderFreeList() {
+    const free = allocator.getMemoryLayout().filter(b => b.free);
+    freeListViz.innerHTML = '';
+    if (!free.length) {
+      freeListViz.innerHTML = '<span class="fl-null">(empty — fully allocated)</span>';
+      return;
+    }
+    free.forEach((block, i) => {
+      const node = document.createElement('div');
+      node.className = 'fl-node';
+      node.textContent = `[${block.start}, ${block.size}]`;
+      freeListViz.appendChild(node);
+      const arrow = document.createElement('span');
+      arrow.className = 'fl-arrow';
+      arrow.textContent = '→';
+      freeListViz.appendChild(arrow);
+    });
+    const nil = document.createElement('span');
+    nil.className = 'fl-null';
+    nil.textContent = 'NULL';
+    freeListViz.appendChild(nil);
+  }
+
+  // ── Log with educational explanations ─────────────────
+  function addLog(action, detail, explain = '') {
+    const typeClass = action === 'malloc' ? 'log-malloc' : action === 'free' ? 'log-free' : action.includes('fail') ? 'log-fail' : 'log-reset';
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${typeClass}`;
+    entry.innerHTML = `<span class="log-action">${action}</span><span class="log-detail">${detail}</span>${explain ? `<span class="log-explain">${explain}</span>` : ''}`;
+    logList.insertBefore(entry, logList.firstChild);
+    while (logList.children.length > 50) logList.lastChild.remove();
+  }
+
+  // ── Full refresh ──────────────────────────────────────
+  function refresh() { renderPool(); renderTable(); renderStats(); renderFreeList(); }
+
+  // ── Actions ───────────────────────────────────────────
+  function doMalloc() {
+    const size = parseInt(allocSize.value, 10);
+    let label = allocLabel.value.trim() || `P${labelCounter}`;
+    if (!size || size <= 0 || size > 1000) { toast('Invalid size (1–1000)', 'error'); return; }
+
+    const addr = allocator.malloc(size, label);
+    if (addr !== null) {
+      const strategy = allocator.strategy === 'best-fit' ? 'Best Fit' : 'First Fit';
+      toast(`${label}: ${size}u allocated at 0x${addr.toString(16)}`, 'success');
+      addLog('malloc', `${label}: ${size}u @ 0x${addr.toString(16).padStart(4,'0')}`, `${strategy} chose this block`);
+      labelCounter++;
+      allocLabel.value = '';
+    } else {
+      toast(`malloc(${size}) failed — no contiguous block found`, 'error');
+      addLog('fail', `malloc(${size}) — no fit`, 'All free blocks are too small');
+    }
+    refresh();
+  }
+
+  function doFree(address) {
+    const addr = parseInt(address, 10);
+    if (isNaN(addr)) { toast('Invalid address', 'error'); return; }
+
+    // Check if coalescing will happen (for educational note)
+    const layoutBefore = allocator.getMemoryLayout();
+    const target = layoutBefore.find(b => b.start === addr && !b.free);
+    let willMerge = false;
+    if (target) {
+      const idx = layoutBefore.indexOf(target);
+      const prev = layoutBefore[idx - 1];
+      const next = layoutBefore[idx + 1];
+      willMerge = (prev && prev.free) || (next && next.free);
+    }
+
+    const ok = allocator.free(addr);
+    if (ok) {
+      toast(`Block at 0x${addr.toString(16)} freed`, 'info');
+      const explain = willMerge ? 'Adjacent blocks coalesced!' : 'No adjacent free blocks to merge';
+      addLog('free', `0x${addr.toString(16).padStart(4,'0')} released`, explain);
+    } else {
+      toast(`free(${addr}) failed`, 'error');
+      addLog('fail', `free(0x${addr.toString(16).padStart(4,'0')})`, 'Not a valid allocated block');
+    }
+    refresh();
+  }
+
+  function doReset() {
+    allocator.reset();
+    labelCounter = 1;
+    Object.keys(labelColorMap).forEach(k => delete labelColorMap[k]);
+    colorIndex = 0;
+    addLog('reset', 'Memory pool reset — 1000 units free', 'All blocks reclaimed');
+    toast('Memory reset', 'info');
+    refresh();
+  }
+
+  function doRandom() {
+    doReset();
+    const count = 4 + Math.floor(Math.random() * 5);
+    const labels = [];
+    for (let i = 0; i < count; i++) {
+      const sz = 40 + Math.floor(Math.random() * 160);
+      const lbl = `P${labelCounter}`;
+      const addr = allocator.malloc(sz, lbl);
+      if (addr !== null) {
+        labels.push({ addr, lbl, sz });
+        addLog('malloc', `${lbl}: ${sz}u @ 0x${addr.toString(16).padStart(4,'0')}`, 'auto');
+        labelCounter++;
+      }
+    }
+    const toFree = labels.filter(() => Math.random() < 0.4);
+    toFree.forEach(({ addr, lbl }) => {
+      allocator.free(addr);
+      addLog('free', `0x${addr.toString(16).padStart(4,'0')} (${lbl})`, 'auto — creates fragmentation');
+    });
+    toast(`Scenario: ${count} allocs, ${toFree.length} freed`, 'success');
+    refresh();
+  }
+
+  // ── Strategy Toggle ───────────────────────────────────
+  function setStrategy(strategy) {
+    allocator.setStrategy(strategy);
+    document.querySelectorAll('.strategy-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.strategy === strategy);
+    });
+    toast(`Strategy: ${strategy === 'best-fit' ? 'Best Fit' : 'First Fit'}`, 'info');
+    addLog('config', `Strategy → ${strategy}`, strategy === 'best-fit' ? 'Minimises waste per alloc' : 'Fastest traversal');
+  }
+
+  // ── Event Binding ─────────────────────────────────────
+  $('btnMalloc').addEventListener('click', doMalloc);
+  $('btnFree').addEventListener('click', () => doFree(freeAddr.value));
+  $('btnReset').addEventListener('click', doReset);
+  $('btnRandom').addEventListener('click', doRandom);
+  $('btnFirstFit').addEventListener('click', () => setStrategy('first-fit'));
+  $('btnBestFit').addEventListener('click', () => setStrategy('best-fit'));
+  allocSize.addEventListener('keydown', e => { if (e.key === 'Enter') doMalloc(); });
+  allocLabel.addEventListener('keydown', e => { if (e.key === 'Enter') doMalloc(); });
+  freeAddr.addEventListener('keydown', e => { if (e.key === 'Enter') doFree(freeAddr.value); });
+
+  // ── Init ──────────────────────────────────────────────
+  buildRuler();
+  refresh();
+})();
+  </script>
+</body>
+</html>
